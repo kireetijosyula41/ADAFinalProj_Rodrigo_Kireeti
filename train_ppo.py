@@ -2,6 +2,7 @@
 import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
 N_ENVS = 1         # number of parallel training environments
@@ -19,7 +20,11 @@ def make_vec_env(version):
     )
     return vec_env
 
-def main(version: str, run_id=None):
+def main(version: str, run_id: int = 0, exp_id: int = 0):
+    seed = exp_id * 100 + run_id
+    print(f"[PPO] version={version}, exp_id={exp_id}, run_id={run_id}, seed={seed}")
+
+    set_random_seed(seed)
     vec_env = make_vec_env(version)
 
     model = PPO(
@@ -32,6 +37,7 @@ def main(version: str, run_id=None):
         n_epochs=10,
         ent_coef=0.01,
         learning_rate=3e-4,
+        seed=seed,
     )
 
     model.learn(total_timesteps=TOTAL_TIMESTEPS)
@@ -51,11 +57,18 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) == 1:
         version = "new"
-        run_id = None
+        run_id = 0
+        exp_id = 0
     elif len(sys.argv) == 2:
         version = sys.argv[1]
-        run_id = None
+        run_id = 0
+        exp_id = 0
+    elif len(sys.argv) == 3:
+        version = sys.argv[1]
+        run_id = int(sys.argv[2])
+        exp_id = 0
     else:
         version = sys.argv[1]
         run_id = int(sys.argv[2])
-    main(version, run_id)
+        exp_id = int(sys.argv[3])
+    main(version, run_id, exp_id)

@@ -1,5 +1,6 @@
 from stable_baselines3 import A2C
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
 TOTAL_TIMESTEPS = 600_000  # comparable to PPO but typically needs fewer
@@ -18,7 +19,11 @@ def make_vec_env(version: str):
     )
     return vec_env
 
-def main(version: str, run_id=None):
+def main(version: str, run_id: int = 0, exp_id: int = 0):
+    seed = exp_id * 100 + run_id
+    print(f"[A2C] version={version}, exp_id={exp_id}, run_id={run_id}, seed={seed}")
+
+    set_random_seed(seed)
     vec_env = make_vec_env(version)
     
     model = A2C(
@@ -31,6 +36,7 @@ def main(version: str, run_id=None):
         gae_lambda=0.95,          # standard for advantage estimation
         ent_coef=0.0,             # entropy often not needed for A2C; can set to 0.01 if you want exploration
         vf_coef=0.5,              # value loss coefficient (default)
+        seed=seed,
     )
 
     model.learn(total_timesteps=TOTAL_TIMESTEPS)
@@ -50,11 +56,18 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) == 1:
         version = "new"
-        run_id = None
+        run_id = 0
+        exp_id = 0
     elif len(sys.argv) == 2:
         version = sys.argv[1]
-        run_id = None
+        run_id = 0
+        exp_id = 0
+    elif len(sys.argv) == 3:
+        version = sys.argv[1]
+        run_id = int(sys.argv[2])
+        exp_id = 0
     else:
         version = sys.argv[1]
         run_id = int(sys.argv[2])
-    main(version, run_id)
+        exp_id = int(sys.argv[3])
+    main(version, run_id, exp_id)

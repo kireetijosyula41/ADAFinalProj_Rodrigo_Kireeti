@@ -5,10 +5,12 @@ set -euo pipefail
 VERSION="new"
 
 # How many ensemble members per algorithm
-N_RUNS=10
+N_RUNS=7
+EXP_ID=0  # Experiment ID to distinguish different ensemble experiments
 
 echo "Running ensembles for version: ${VERSION}"
 echo "Number of runs per algorithm: ${N_RUNS}"
+echo "Experiment ID: ${EXP_ID}"
 echo
 
 # Helper function to train one algorithm N_RUNS times
@@ -22,7 +24,7 @@ train_algo_ensemble() {
   for (( i=0; i<${N_RUNS}; i++ )); do
     echo
     echo "--- ${algo} run ${i} ---"
-    python "train_${algo}.py" "${VERSION}" "${i}"
+    python "train_${algo}.py" "${VERSION}" "${i}" "${EXP_ID}"
   done
 
   echo
