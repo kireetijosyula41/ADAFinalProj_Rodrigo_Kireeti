@@ -32,7 +32,6 @@ def main(version: str, run_id=None):
         n_epochs=10,
         ent_coef=0.01,
         learning_rate=3e-4,
-        seed=run_id if run_id is not None else 0,
     )
 
     model.learn(total_timesteps=TOTAL_TIMESTEPS)

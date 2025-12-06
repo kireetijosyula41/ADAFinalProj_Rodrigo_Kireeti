@@ -29,7 +29,6 @@ def main(version: str, run_id=None):
         gae_lambda=0.95,
         learning_rate=1e-4,
         target_kl=0.025,
-        seed=run_id if run_id is not None else 0,
     )
 
     model.learn(total_timesteps=TOTAL_TIMESTEPS)

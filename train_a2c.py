@@ -31,7 +31,6 @@ def main(version: str, run_id=None):
         gae_lambda=0.95,          # standard for advantage estimation
         ent_coef=0.0,             # entropy often not needed for A2C; can set to 0.01 if you want exploration
         vf_coef=0.5,              # value loss coefficient (default)
-        seed=run_id if run_id is not None else 0,
     )
 
     model.learn(total_timesteps=TOTAL_TIMESTEPS)
