@@ -105,10 +105,6 @@ class CryptoPortfolioEnvNew(gym.Env):
         # Need t+1 < T to compute returns; t ranges up to T-2
         self.t_max = self.T - 2
 
-    # ------------------------------------------------------------------ #
-    # Gymnasium API
-    # ------------------------------------------------------------------ #
-
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
@@ -120,7 +116,7 @@ class CryptoPortfolioEnvNew(gym.Env):
             self.t = self.window
 
         self.wealth = self.initial_wealth
-        self.position = self.cash_index  # start fully in cash
+        self.position = self.cash_index
 
         obs = self._get_obs()
         info = {"wealth": self.wealth, "t": self.t}
@@ -144,41 +140,53 @@ class CryptoPortfolioEnvNew(gym.Env):
         else:
             asset_log_ret = float(self.returns[self.t, prev_position])
             asset_log_ret = float(np.clip(asset_log_ret, -0.5, 0.5))
-            # p_t = self.prices[self.t, prev_position]
-            # p_tp1 = self.prices[self.t + 1, prev_position]
-            # # simple return, not log
-            # asset_ret = (p_tp1 / (p_t + 1e-8)) - 1.0
 
-        # 2. Update wealth due to asset return
-        new_wealth = prev_wealth * float(np.exp(asset_log_ret))
+        # 2. Compute log-return directly (avoids ratio clipping)
+        fee_log = 0.0
+        if action != prev_position and self.fee > 0.0:
+            # guard against fee == 1.0
+            fee_log = float(np.log(max(1.0 - self.fee, 1e-12)))
 
-        # 3. Apply transaction fee if we changed position (incl. cash transitions)
-        if action != prev_position:
-            new_wealth *= (1.0 - self.fee)
+        log_ret = asset_log_ret + fee_log
 
+        # 3. Compute new wealth multiplicatively
+        # If prev_wealth is non-positive or non-finite, treat as terminal (bankrupt)
+        if not np.isfinite(prev_wealth) or prev_wealth <= 0.0:
+            # immediately terminate; no meaningful return
+            obs = self._get_obs()
+            info = {"wealth": self.wealth, "t": self.t}
+            return obs, 0.0, True, False, info
+
+        new_wealth = prev_wealth * float(np.exp(log_ret))
+
+        # 4. Prevent absurdly large wealth growth by terminating instead of clipping,
+        #    or keep a high cap but don't use it for reward computation.
         wealth_max = 1e6
-        # Avoid negative or zero wealth
-        new_wealth = float(np.clip(new_wealth, self.wealth_min, wealth_max))
+        if new_wealth <= self.wealth_min:
+            # bankrupt -> terminate (no reward for this failing step)
+            self.wealth = float(np.clip(new_wealth, self.wealth_min, wealth_max))
+            terminated = True
+            reward = 0.0
+            self.position = int(action)
+            self.t += 1
+            obs = self._get_obs()
+            info = {"wealth": self.wealth, "t": self.t}
+            return obs, reward, terminated, False, info
 
-        if prev_wealth <= 0.0 or not np.isfinite(prev_wealth):
-            log_ret = 0.0
-        else:
-            ratio = new_wealth / prev_wealth
-            ratio = float(np.clip(ratio, 1e-6, 1e6))
-            log_ret = float(np.log(ratio))
+        # Optionally clip wealth for numeric safety but do NOT use clipped ratio for reward
+        self.wealth = float(np.clip(new_wealth, self.wealth_min, wealth_max))
 
-        # 4. Compute per-step reward: log-return of wealth, minus trade penalty
+        # 5. Per-step reward is the log-return minus trade penalty
         penalty = self.trade_penalty if action != prev_position else 0.0
-        reward = log_ret - penalty
+        reward = float(log_ret) - penalty
 
-        # 5. Advance environment state
-        self.wealth = new_wealth
+        # 6. Advance state
         self.position = int(action)
         self.t += 1
 
-        # 6. Termination conditions
-        terminated = self.wealth <= self.wealth_min     # effectively bankrupt
-        truncated = self.t >= self.t_max                # ran out of data to trade
+        # 7. Termination / truncation
+        terminated = self.wealth <= self.wealth_min
+        truncated = self.t >= self.t_max
 
         obs = self._get_obs()
         if not np.all(np.isfinite(obs)):

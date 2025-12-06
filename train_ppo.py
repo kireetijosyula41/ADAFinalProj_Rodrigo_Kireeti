@@ -2,59 +2,61 @@
 import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from make_envs import make_train_env
 
-from make_envs import make_train_env, make_train_env_new
-
-N_ENVS = 2         # number of parallel training environments
+N_ENVS = 1         # number of parallel training environments
 TOTAL_TIMESTEPS = 800_000  # can bump to 1-2M later as needed
 
-
-def env_chooser(version):
-    if version == "new":
-        def _make_env():
-            return make_train_env_new()
-    else:
-        def _make_env():
-            return make_train_env()
-    return _make_env
-
-
-def main(version):       
-    # Wrap in VecEnv for SB3
-    vec_env = DummyVecEnv([env_chooser(version) for _ in range(N_ENVS)])
-
+def make_vec_env(version):
+    def _init():
+         return make_train_env(version)
+    vec_env = DummyVecEnv([_init for _ in range(N_ENVS)])
     vec_env = VecNormalize(
         vec_env,
         norm_obs=True,
         norm_reward=True,
         clip_obs=10.0,
     )
+    return vec_env
 
-    # Define and train the PPO model
+def main(version: str, run_id=None):
+    vec_env = make_vec_env(version)
+
     model = PPO(
         "MlpPolicy",
-        env=vec_env,
+        vec_env,
         verbose=1,
-        learning_rate=3e-4,
         gamma=0.99,
-        batch_size = 64,
-        n_steps=32,
-        ent_coef=0.02,
+        n_steps=2048,
+        batch_size=512,
+        n_epochs=10,
+        ent_coef=0.01,
+        learning_rate=3e-4,
+        seed=run_id if run_id is not None else 0,
     )
 
-    # Learn for 300,000 timesteps where each timestep is one env step
-    # In the env step, we move forward by one day
-    # since we have 1400 days of data, this is about 214 epochs
-    # (total_timesteps = epochs * train_T)
     model.learn(total_timesteps=TOTAL_TIMESTEPS)
-    vec_env.save("vecnormalize_stats_ppo.pkl")
-    model.save("crypto_portfolio_ppo.zip")
-    print("Saved trained model to ppo_crypto_portfolio.zip")
+    if run_id is None:
+        model_path = "crypto_portfolio_ppo.zip"
+        vecnorm_path = "vecnormalize_stats_ppo.pkl"
+    else:
+        model_path = f"crypto_portfolio_ppo_run{run_id}.zip"
+        vecnorm_path = f"vecnormalize_stats_ppo_run{run_id}.pkl"
+    model.save(model_path)
+    vec_env.save(vecnorm_path)
+    print(f"Saved PPO model to {model_path}")
+    print(f"Saved VecNormalize stats to {vecnorm_path}")
 
 if __name__ == "__main__":
     print("Usage: python train_ppo.py [original|new]")
-    import sys 
-    if len(sys.argv) > 1 and sys.argv[1] == "new":
-        main("new")
-    else: 
-        main("original")
+    import sys
+    if len(sys.argv) == 1:
+        version = "new"
+        run_id = None
+    elif len(sys.argv) == 2:
+        version = sys.argv[1]
+        run_id = None
+    else:
+        version = sys.argv[1]
+        run_id = int(sys.argv[2])
+    main(version, run_id)
