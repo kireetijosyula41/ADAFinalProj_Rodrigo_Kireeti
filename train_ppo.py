@@ -42,8 +42,8 @@ def main(version: str, run_id=None):
     else:
         model_path = f"crypto_portfolio_ppo_run{run_id}.zip"
         vecnorm_path = f"vecnormalize_stats_ppo_run{run_id}.pkl"
-    model.save(model_path)
-    vec_env.save(vecnorm_path)
+    model.save(f"./models/{model_path}")
+    vec_env.save(f"./models/{vecnorm_path}")
     print(f"Saved PPO model to {model_path}")
     print(f"Saved VecNormalize stats to {vecnorm_path}")
 
