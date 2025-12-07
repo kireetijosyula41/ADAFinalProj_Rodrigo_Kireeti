@@ -58,8 +58,25 @@ def run_trained_agent(vec_env, model):
     rewards = []
 
     done = False
+
+    # Track LSTM hidden state and episode_start flag when using RecurrentPPO
+    is_recurrent = isinstance(model, RecurrentPPO)
+    lstm_states = None
+    episode_start = np.ones((1,), dtype=bool) if is_recurrent else None
+
     while not done:
-        action, _ = model.predict(obs, deterministic=True)
+        if is_recurrent:
+            # Try the RecurrentPPO predict signature that accepts state and episode_start.
+            # Fall back to the simple predict signature if that fails for this sb3_contrib version.
+            try:
+                action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_start, deterministic=True)
+            except Exception:
+                action, lstm_states = model.predict(obs, deterministic=True)
+            # after first step in the episode, subsequent steps are not episode starts
+            episode_start = np.zeros((1,), dtype=bool)
+        else:
+            action, _ = model.predict(obs, deterministic=True)
+
         obs, reward, dones, infos = vec_env.step(action)
 
         done = bool(dones[0])
@@ -67,7 +84,13 @@ def run_trained_agent(vec_env, model):
         wealth = float(info.get("wealth", np.nan))
         wealth_path.append(wealth)
         rewards.append(float(reward[0]))
-        actions_taken.append(int(action[0]))
+        # normalize action to scalar int
+        actions_taken.append(int(np.asarray(action).reshape(-1)[0]))
+
+        if done and is_recurrent:
+            # reset LSTM state for the next episode
+            lstm_states = None
+            episode_start = np.ones((1,), dtype=bool)
 
     final_list = []
     for i in zip(wealth_path, actions_taken, rewards):

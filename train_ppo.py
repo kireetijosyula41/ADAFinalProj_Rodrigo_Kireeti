@@ -6,7 +6,7 @@ from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
 N_ENVS = 1         # number of parallel training environments
-TOTAL_TIMESTEPS = 200_000  # can bump to 1-2M later as needed
+TOTAL_TIMESTEPS = 300_000  # can bump to 1-2M later as needed
 
 def make_vec_env(version):
     def _init():
