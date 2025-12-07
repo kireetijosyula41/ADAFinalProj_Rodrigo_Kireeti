@@ -27,7 +27,9 @@ class CryptoPortfolioEnvOriginal(gym.Env):
                  price_array: np.ndarray, 
                  window_size: int = 60, 
                  transaction_fee: float = 0.0001, 
-                 initial_wealth: float = 1.0):
+                 initial_wealth: float = 1.0,
+                 include_positional: bool = True,    # NEW
+                 ):
         # Inherit from gym.Env
         super().__init__()
         self.prices = price_array.astype(np.float32)
@@ -51,9 +53,11 @@ class CryptoPortfolioEnvOriginal(gym.Env):
         
         # Observation:
         #   window * N price features
+        #   + optional positional (window)
         #   + (N + 1) one-hot position
         #   + 1 scalar wealth
-        obs_dim = self.window * self.N + (self.N + 1) + 1
+        pos_extra = self.window if include_positional else 0
+        obs_dim = self.window * self.N + pos_extra + (self.N + 1) + 1
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -85,8 +89,11 @@ class CryptoPortfolioEnvOriginal(gym.Env):
         window_prices = self.prices[start:end, :]
         base = window_prices[0:1, :]
         rel_window = (window_prices / (base + 1e-8)) - 1.0
-        # flatten to length window * N
         price_feat = rel_window.flatten().astype(np.float32)
+
+        if self.include_positional:
+            pos = np.linspace(0.0, 1.0, num=self.window, dtype=np.float32)
+            price_feat = np.concatenate([price_feat, pos])
 
         # one-hot for current position (0..N, N=cash)
         holding = np.zeros(self.N + 1, dtype=np.float32)

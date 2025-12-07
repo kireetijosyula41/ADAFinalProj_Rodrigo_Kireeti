@@ -27,7 +27,7 @@ def _env_classes(version):
         case _:
             raise ValueError(f"Unknown version: {version}")
 
-def make_train_env(version="new"):
+def make_train_env(version="new", include_wealth: bool = True):
     price_array = _load_price_array()
     train_prices, _ = _split_train_test(price_array, train_fraction=0.7)
     EnvClass = _env_classes(version)
@@ -36,10 +36,12 @@ def make_train_env(version="new"):
         window_size=WINDOW_SIZE,
         transaction_fee=FEE,
         initial_wealth=1.0,
+        include_wealth=include_wealth,   # pass through
+        include_positional=True,      # NEW
     )
     return env
 
-def make_test_env(version="new"):
+def make_test_env(version="new", include_wealth: bool = True):
     price_array = _load_price_array()
     _, test_prices = _split_train_test(price_array, train_fraction=0.7)
     EnvClass = _env_classes(version)
@@ -48,6 +50,8 @@ def make_test_env(version="new"):
         window_size=WINDOW_SIZE,
         transaction_fee=FEE,
         initial_wealth=1.0,
+        include_wealth=include_wealth,   # pass through
+        include_positional=True,      # NEW
     )
     return env
 

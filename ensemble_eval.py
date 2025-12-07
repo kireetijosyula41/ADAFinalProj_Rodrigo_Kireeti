@@ -28,14 +28,14 @@ from typing import List
 import numpy as np
 import torch
 
-from stable_baselines3 import PPO, A2C
-from sb3_contrib import TRPO
+from stable_baselines3 import A2C
+from sb3_contrib import TRPO, RecurrentPPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from make_envs import make_test_env
 
 ALGOS = {
-    "ppo": PPO,
+    "ppo": RecurrentPPO,
     "a2c": A2C,
     "trpo": TRPO,
 }
@@ -182,6 +182,6 @@ if __name__ == "__main__":
     version = sys.argv[2] if len(sys.argv) > 2 else "new"
     exp_id = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 
-    run_ids = list(range(10))  # 10-member ensemble
+    run_ids = list(range(7))  # 7-member ensemble
 
     evaluate_ensemble(algo, version, exp_id, run_ids)

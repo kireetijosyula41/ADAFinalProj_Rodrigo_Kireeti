@@ -3,7 +3,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
-TOTAL_TIMESTEPS = 800_000
+TOTAL_TIMESTEPS = 600_000
 N_ENVS = 1
 
 def make_vec_env(version):

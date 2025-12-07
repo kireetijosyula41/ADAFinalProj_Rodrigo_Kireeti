@@ -42,6 +42,10 @@ class CryptoPortfolioEnvNew(gym.Env):
         trade_penalty: float = 0.0,
         random_start: bool = False,
         wealth_min: float = 1e-8,
+        include_wealth: bool = True,
+        clip_log_wealth: float = 10.0,
+        near_bankrupt_threshold: float = None,
+        include_positional: bool = True,   # NEW: include time-positional encoding
     ):
         """
         Parameters
@@ -61,6 +65,13 @@ class CryptoPortfolioEnvNew(gym.Env):
             history. If False, always start at t = window_size.
         wealth_min : float
             Threshold below which wealth is treated as effectively bankrupt.
+        include_wealth : bool
+            If True, include the log-wealth in the observation space.
+        clip_log_wealth : float
+            If include_wealth is True, clip the log-wealth to this range.
+        near_bankrupt_threshold : float
+            If include_wealth is False, and this threshold is set, expose a boolean
+            feature indicating if the wealth is below this threshold (1.0 if yes, 0.0 if no).
         """
         super().__init__()
 
@@ -76,6 +87,13 @@ class CryptoPortfolioEnvNew(gym.Env):
         self.trade_penalty = float(trade_penalty)
         self.random_start = bool(random_start)
         self.wealth_min = float(wealth_min)
+        self.include_wealth = bool(include_wealth)
+        self.clip_log_wealth = float(clip_log_wealth)
+        # if threshold is provided, used to produce a near-bankrupt boolean when wealth not included
+        self.near_bankrupt_threshold = None if near_bankrupt_threshold is None else float(near_bankrupt_threshold)
+
+        # Whether to append positional/time encoding to the flattened window
+        self.include_positional = bool(include_positional)
 
         # Index representing cash position
         self.cash_index = self.N
@@ -93,8 +111,14 @@ class CryptoPortfolioEnvNew(gym.Env):
         # Gym spaces
         self.action_space = gym.spaces.Discrete(self.N + 1)
 
-        # Observation: window * N log-returns + (N+1) one-hot + 1 log-wealth
-        obs_dim = self.window * self.N + (self.N + 1) + 1
+        # Observation: window * N log-returns + optional positional (window) + (N+1) one-hot + optional 1 log-wealth/boolean
+        pos_extra = self.window if self.include_positional else 0
+        extra = 0
+        if self.include_wealth:
+            extra = 1
+        elif self.near_bankrupt_threshold is not None:
+            extra = 1  # boolean indicator
+        obs_dim = self.window * self.N + pos_extra + (self.N + 1) + extra
         self.observation_space = gym.spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -205,22 +229,39 @@ class CryptoPortfolioEnvNew(gym.Env):
           - one-hot for current position (N assets + cash)
           - log(current_wealth)
         """
-        # returns has shape (T-1, N); at time t we have returns up to index t-1
+        # 1. window of past log-returns: [t-window, ..., t-1]
         start = self.t - self.window
         end = self.t
-        window_rets = self.returns[start:end, :]  # shape: (window, N)
-        
-        window_rets = np.nan_to_num(window_rets, nan=0.0, posinf=0.0, neginf=0.0)
+        window_prices = self.prices[start:end, :]
+        base = window_prices[0:1, :]
+        rel_window = np.log(window_prices / (base + 1e-12))  # log-returns style window
+        price_feat = rel_window.flatten().astype(np.float32)
 
-        price_feat = window_rets.flatten().astype(np.float32)
+        # positional/time encoding (simple normalized index 0..1 for each time-step)
+        if self.include_positional:
+            pos = np.linspace(0.0, 1.0, num=self.window, dtype=np.float32)  # shape (window,)
+            pos_feat = pos.astype(np.float32)
+            # append positional scalars (length window)
+            price_feat = np.concatenate([price_feat, pos_feat])
 
-        # one-hot position
+        # one-hot for current position (0..N, N=cash)
         holding = np.zeros(self.N + 1, dtype=np.float32)
         holding[self.position] = 1.0
 
-        # log-wealth
-        w = self.wealth if np.isfinite(self.wealth) and self.wealth > 0 else self.wealth_min
-        wealth_feat = np.array([np.log(w + 1e-12)], dtype=np.float32)
-
-        obs = np.concatenate([price_feat, holding, wealth_feat])
-        return obs
+        # log-wealth or other small feature
+        if self.include_wealth:
+            w = self.wealth if np.isfinite(self.wealth) and self.wealth > 0 else self.wealth_min
+            logw = np.log(w + 1e-12) - np.log(self.initial_wealth + 1e-12)
+            logw = float(np.clip(logw, -self.clip_log_wealth, self.clip_log_wealth))
+            wealth_feat = np.array([logw], dtype=np.float32)
+            obs = np.concatenate([price_feat, holding, wealth_feat])
+            return obs
+        else:
+            if self.near_bankrupt_threshold is not None:
+                near = 1.0 if self.wealth <= self.near_bankrupt_threshold else 0.0
+                near_feat = np.array([near], dtype=np.float32)
+                obs = np.concatenate([price_feat, holding, near_feat])
+                return obs
+            else:
+                obs = np.concatenate([price_feat, holding])
+                return obs

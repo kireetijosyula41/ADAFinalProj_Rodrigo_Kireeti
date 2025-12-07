@@ -1,12 +1,12 @@
 # train_ppo.py
 import numpy as np
-from stable_baselines3 import PPO
+from sb3_contrib import RecurrentPPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
 N_ENVS = 1         # number of parallel training environments
-TOTAL_TIMESTEPS = 800_000  # can bump to 1-2M later as needed
+TOTAL_TIMESTEPS = 600_000  # can bump to 1-2M later as needed
 
 def make_vec_env(version):
     def _init():
@@ -22,20 +22,20 @@ def make_vec_env(version):
 
 def main(version: str, run_id: int = 0, exp_id: int = 0):
     seed = exp_id * 100 + run_id
-    print(f"[PPO] version={version}, exp_id={exp_id}, run_id={run_id}, seed={seed}")
+    print(f"[RecurrentPPO] version={version}, exp_id={exp_id}, run_id={run_id}, seed={seed}")
 
     set_random_seed(seed)
     vec_env = make_vec_env(version)
 
-    model = PPO(
-        "MlpPolicy",
-        vec_env,
+    # RecurrentPPO with LSTM policy (sequence-aware)
+    model = RecurrentPPO(
+        policy="MlpLstmPolicy",
+        env=vec_env,
         verbose=1,
-        gamma=0.99,
-        n_steps=2048,
-        batch_size=512,
+        n_steps=2048,      # shorter rollouts for recurrent updates
+        batch_size=64,
         n_epochs=10,
-        ent_coef=0.01,
+        gamma=0.99,
         learning_rate=3e-4,
         seed=seed,
     )
@@ -49,7 +49,7 @@ def main(version: str, run_id: int = 0, exp_id: int = 0):
         vecnorm_path = f"vecnormalize_stats_ppo_run{run_id}.pkl"
     model.save(f"./models/{model_path}")
     vec_env.save(f"./models/{vecnorm_path}")
-    print(f"Saved PPO model to {model_path}")
+    print(f"Saved RecurrentPPO model to {model_path}")
     print(f"Saved VecNormalize stats to {vecnorm_path}")
 
 if __name__ == "__main__":
