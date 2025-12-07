@@ -3,7 +3,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
-TOTAL_TIMESTEPS = 600_000  # comparable to PPO but typically needs fewer
+TOTAL_TIMESTEPS = 300_000  # comparable to PPO but typically needs fewer
 N_ENVS = 1                # using a single environment as requested
 
 
