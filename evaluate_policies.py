@@ -1,7 +1,7 @@
 # evaluate_policies.py
 import numpy as np
-from stable_baselines3 import PPO, A2C
-from sb3_contrib import TRPO
+from stable_baselines3 import A2C
+from sb3_contrib import TRPO, RecurrentPPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from make_envs import make_test_env_new
 
