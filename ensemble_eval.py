@@ -1,7 +1,18 @@
 """
-Ensemble evaluation with per-model VecNormalize stats (correct logic).
+Ensemble evaluation for RL policies with per-model VecNormalize statistics.
 
-Usage:
+This module evaluates an ensemble of trained policy models (PPO, A2C, TRPO)
+by applying each model's saved VecNormalize observation statistics individually
+before obtaining action probabilities. The ensemble performs soft voting over
+per-model action probability distributions (average probabilities, then argmax).
+
+Purpose:
+- Allow evaluation where each model was trained with its own normalization
+  (VecNormalize) by applying those stats at inference time without wrapping
+  the environment in VecNormalize (so per-model stats are applied manually).
+- Produce a trajectory of wealth and actions under the ensemble policy.
+
+Usage examples:
     python ensemble_eval.py ppo new 0
     python ensemble_eval.py a2c new 0
     python ensemble_eval.py trpo new 0
@@ -32,6 +43,10 @@ ALGOS = {
 def make_base_env(version: str):
     """
     Plain test VecEnv (NO VecNormalize) so we can apply per-model normalization.
+
+    Returns a DummyVecEnv that yields raw (un-normalized) observations from the
+    test environment. This is important because normalization will be applied
+    manually per-model using saved VecNormalize stats.
     """
     def _init():
         return make_test_env(version)
@@ -42,6 +57,9 @@ def make_base_env(version: str):
 def load_vecnorm_stats(path: str) -> VecNormalize:
     """
     Load VecNormalize only to recover its statistics; env is not used.
+
+    The returned VecNormalize object is used only for its obs_rms mean/var/eps
+    and clipping settings so we can normalize observations to match training.
     """
     vn = VecNormalize.load(path, venv=None)
     return vn
@@ -53,6 +71,8 @@ def normalize_obs_with_stats(obs: np.ndarray, vn: VecNormalize) -> np.ndarray:
         obs_norm = clip( (obs - mean) / sqrt(var + eps), [-clip_obs, clip_obs] )
 
     obs: shape (1, obs_dim)
+
+    This mirrors the transformation performed by VecNormalize during training.
     """
     mean = vn.obs_rms.mean
     var = vn.obs_rms.var
@@ -70,6 +90,10 @@ def ensemble_action(models, vecnorm_stats, obs_raw):
     models        : list of SB3 models
     vecnorm_stats : list of VecNormalize objects (stats only)
     obs_raw       : np.ndarray (1, obs_dim) from the base env
+
+    Returns:
+    - action (int): chosen discrete action (argmax of averaged probs)
+    - mean_probs (np.ndarray): averaged probability vector across models
     """
     probs_list = []
 
@@ -91,6 +115,13 @@ def evaluate_ensemble(algo: str, version: str, exp_id: int, run_ids: List[int]):
     """
     Build an ensemble from {algo}_{version}_exp{exp_id}_run{r}.zip (r in run_ids),
     each with its own VecNormalize stats, and evaluate on the test set.
+
+    Procedure:
+    1) Create a base (un-normalized) environment to get raw observations.
+    2) Load each model and its corresponding VecNormalize stats.
+    3) On each step, normalize the raw observation with each model's stats,
+       get model action probabilities, average them (soft vote), and pick action.
+    4) Step the environment with the ensemble action and record wealth/action history.
     """
     ModelClass = ALGOS[algo]
 
@@ -115,12 +146,14 @@ def evaluate_ensemble(algo: str, version: str, exp_id: int, run_ids: List[int]):
         vn = load_vecnorm_stats(stats_path)
         vecnorm_stats.append(vn)
 
+    # Reset environment to obtain initial raw observation
     obs = vec_env.reset()  # raw obs
     done = False
 
     wealth_history = []
     action_history = []
 
+    # 3) Step loop: compute ensemble action, apply to env, collect stats
     while not done:
         action, mean_probs = ensemble_action(models, vecnorm_stats, obs)
         action_history.append(action)

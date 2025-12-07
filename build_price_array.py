@@ -1,7 +1,3 @@
-# build_price_array.py
-import pandas as pd
-import numpy as np
-
 """
 Build an aligned price array for all tickers with forward-filled prices.
 
@@ -19,6 +15,8 @@ Output:
 - price_array_aligned.npy : np.ndarray of shape (T, N) with aligned close prices
 - price_array_dates.npy   : np.ndarray of dtype datetime64[ns] with the timestamps
 """
+import pandas as pd
+import numpy as np
 
 TICKERS = [
     "EOSUSD", "ZRXUSD", "NEOUSD", "TRXUSD", "OMGUSD",
@@ -53,6 +51,18 @@ def load_ticker_df(ticker: str) -> pd.DataFrame:
 
 
 def main():
+    """
+    Build and save an aligned price matrix for the configured TICKERS.
+
+    Steps:
+    1. Load each ticker CSV into a DataFrame indexed by datetime.
+    2. Compute the union of all timestamps across tickers.
+    3. Reindex each ticker to the full union, forward-fill internal gaps,
+       and keep pre-listing dates as NaN.
+    4. Combine into a single DataFrame and drop any rows where at least one
+       ticker remains NaN (ensures all tickers are tradable in the range).
+    5. Save the resulting price matrix and corresponding dates as .npy files.
+    """
     # 1. Load all tickers into individual DataFrames
     dfs = {}
     for t in TICKERS:

@@ -134,11 +134,11 @@ class CryptoPortfolioEnvNew(gym.Env):
         prev_wealth = self.wealth
         prev_position = self.position
 
-        # 1. Compute return of the previously held asset over [t, t+1]
-        if prev_position == self.cash_index:
+        # 1. Compute return of the asset selected at time t (action) for period [t, t+1]
+        if action == self.cash_index:
             asset_log_ret = 0.0
         else:
-            asset_log_ret = float(self.returns[self.t, prev_position])
+            asset_log_ret = float(self.returns[self.t, action])
             asset_log_ret = float(np.clip(asset_log_ret, -0.5, 0.5))
 
         # 2. Compute log-return directly (avoids ratio clipping)
