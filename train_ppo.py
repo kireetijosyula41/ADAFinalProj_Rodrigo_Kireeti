@@ -6,7 +6,7 @@ from stable_baselines3.common.utils import set_random_seed
 from make_envs import make_train_env
 
 N_ENVS = 1         # number of parallel training environments
-TOTAL_TIMESTEPS = 300_000  # can bump to 1-2M later as needed
+TOTAL_TIMESTEPS = 50_000  # can bump to 1-2M later as needed
 
 def make_vec_env(version):
     def _init():
@@ -32,7 +32,7 @@ def main(version: str, run_id: int = 0, exp_id: int = 0):
         policy="MlpLstmPolicy",
         env=vec_env,
         verbose=1,
-        n_steps=256,      # shorter rollouts for recurrent updates
+        n_steps=128,      # shorter rollouts for recurrent updates
         batch_size=64,
         n_epochs=10,
         gamma=0.99,
