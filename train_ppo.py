@@ -32,7 +32,7 @@ def main(version: str, run_id: int = 0, exp_id: int = 0):
         policy="MlpLstmPolicy",
         env=vec_env,
         verbose=1,
-        n_steps=2048,      # shorter rollouts for recurrent updates
+        n_steps=256,      # shorter rollouts for recurrent updates
         batch_size=64,
         n_epochs=10,
         gamma=0.99,
