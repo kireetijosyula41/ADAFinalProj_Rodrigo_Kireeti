@@ -3,7 +3,6 @@ import numpy as np
 from stable_baselines3 import A2C
 from sb3_contrib import TRPO, RecurrentPPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from make_envs import make_test_env_new
 
 from make_envs import make_test_env
 
@@ -30,7 +29,7 @@ def make_eval_env(version, VECNORM_PATH):
     """
     if version == "new":
         def _make_env():
-            return make_test_env_new()
+            return make_test_env()
     else:
         def _make_env():
             return make_test_env()
@@ -188,10 +187,11 @@ def main(MODEL_PATH, VECNORM_PATH, model_test, version):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 4:
         print(sys.argv)
         model_test = sys.argv[1]
         version = sys.argv[2]
-    MODEL_PATH = f"crypto_portfolio_{model_test}.zip"
-    VECNORM_PATH = f"vecnormalize_stats_{model_test}.pkl"
+        run_num = sys.argv[3]
+    MODEL_PATH = f"./models/crypto_portfolio_{model_test}_run{run_num}.zip"
+    VECNORM_PATH = f"./models/vecnormalize_stats_{model_test}_run{run_num}.pkl"
     main(MODEL_PATH, VECNORM_PATH, model_test, version)
