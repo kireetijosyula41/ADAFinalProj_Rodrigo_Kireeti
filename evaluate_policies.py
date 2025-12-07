@@ -132,7 +132,7 @@ def main(MODEL_PATH, VECNORM_PATH, model_test, version):
     vec_env = make_eval_env(version, VECNORM_PATH)
     match model_test:
         case "ppo":
-            model = PPO.load(MODEL_PATH, env=vec_env)
+            model = RecurrentPPO.load(MODEL_PATH, env=vec_env)
         case "a2c":
             model = A2C.load(MODEL_PATH, env=vec_env)
         case "trpo":

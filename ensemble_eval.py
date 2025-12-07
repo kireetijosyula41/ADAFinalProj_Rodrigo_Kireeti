@@ -83,33 +83,59 @@ def normalize_obs_with_stats(obs: np.ndarray, vn: VecNormalize) -> np.ndarray:
     norm = np.clip(norm, -clip, clip)
     return norm
 
-def ensemble_action(models, vecnorm_stats, obs_raw):
+def ensemble_action(models, vecnorm_stats, obs_raw, lstm_states, episode_starts):
     """
     Soft voting over models with per-model normalization.
 
-    models        : list of SB3 models
-    vecnorm_stats : list of VecNormalize objects (stats only)
-    obs_raw       : np.ndarray (1, obs_dim) from the base env
-
-    Returns:
-    - action (int): chosen discrete action (argmax of averaged probs)
-    - mean_probs (np.ndarray): averaged probability vector across models
+    Now also accepts and returns lstm_states and episode_starts so LSTM policies
+    maintain their hidden state across timesteps.
     """
     probs_list = []
 
-    for m, vn in zip(models, vecnorm_stats):
+    for i, (m, vn) in enumerate(zip(models, vecnorm_stats)):
         obs_norm = normalize_obs_with_stats(obs_raw, vn)
         obs_tensor = torch.as_tensor(obs_norm, dtype=torch.float32)
 
         with torch.no_grad():
-            dist = m.policy.get_distribution(obs_tensor)
+            # Handle RecurrentPPO (LSTM) policies specially so we preserve hidden state
+            if isinstance(m, RecurrentPPO):
+                # ensure episode_starts entry is a torch.bool tensor of shape (1,)
+                ep_start = torch.tensor([bool(episode_starts[i])], dtype=torch.bool)
+                try:
+                    # Preferred API: some sb3_contrib versions accept lstm_states / episode_starts
+                    dist_out = m.policy.get_distribution(obs_tensor, lstm_states=lstm_states[i], episode_starts=ep_start)
+                    # get_distribution may return (dist, new_lstm_states) or just dist
+                    if isinstance(dist_out, tuple) and len(dist_out) == 2:
+                        dist, new_states = dist_out
+                        lstm_states[i] = new_states
+                    else:
+                        dist = dist_out
+                except Exception:
+                    # Fallback: manually run feature extraction + lstm actor and build distribution
+                    features = m.policy.extract_features(obs_tensor)
+                    # lstm_actor usually returns (latent_pi, new_lstm_states)
+                    try:
+                        latent_pi, new_states = m.policy.lstm_actor(features, lstm_states[i], ep_start)
+                    except Exception:
+                        # alternative attribute name for some versions
+                        latent_pi, new_states = m.policy.mlp_extractor.lstm_actor(features, lstm_states[i], ep_start)
+                    dist = m.policy.action_dist.proba_distribution(action_logits=latent_pi)
+                    lstm_states[i] = new_states
+
+                # After calling, mark that the next step is not an episode start
+                episode_starts[i] = False
+
+            else:
+                # standard (non-recurrent) policy
+                dist = m.policy.get_distribution(obs_tensor)
+
             probs = dist.distribution.probs.detach().cpu().numpy()[0]
             probs_list.append(probs)
 
     mean_probs = np.mean(np.stack(probs_list, axis=0), axis=0)
-    mean_probs = mean_probs / np.sum(mean_probs)  # safety renorm
+    mean_probs = mean_probs / np.sum(mean_probs)
     action = int(np.argmax(mean_probs))
-    return action, mean_probs
+    return action, mean_probs, lstm_states, episode_starts
 
 def evaluate_ensemble(algo: str, version: str, exp_id: int, run_ids: List[int]):
     """
@@ -146,6 +172,10 @@ def evaluate_ensemble(algo: str, version: str, exp_id: int, run_ids: List[int]):
         vn = load_vecnorm_stats(stats_path)
         vecnorm_stats.append(vn)
 
+    # Initialize LSTM hidden states and episode_starts flags for each model
+    lstm_states = [None] * len(models)
+    episode_starts = np.ones((len(models),), dtype=bool)
+
     # Reset environment to obtain initial raw observation
     obs = vec_env.reset()  # raw obs
     done = False
@@ -155,11 +185,18 @@ def evaluate_ensemble(algo: str, version: str, exp_id: int, run_ids: List[int]):
 
     # 3) Step loop: compute ensemble action, apply to env, collect stats
     while not done:
-        action, mean_probs = ensemble_action(models, vecnorm_stats, obs)
+        action, mean_probs, lstm_states, episode_starts = ensemble_action(models, vecnorm_stats, obs, lstm_states, episode_starts)
         action_history.append(action)
 
         obs, rewards, dones, infos = vec_env.step([action])
         done = bool(dones[0])
+
+        # If episode ended, reset LSTM hidden states for recurrent models and mark episode_starts True
+        if done:
+            for i, m in enumerate(models):
+                if isinstance(m, RecurrentPPO):
+                    lstm_states[i] = None
+                episode_starts[i] = True
 
         info = infos[0]
         wealth = info.get("wealth", None)
