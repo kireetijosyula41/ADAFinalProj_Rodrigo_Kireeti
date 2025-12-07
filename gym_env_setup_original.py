@@ -111,27 +111,24 @@ class CryptoPortfolioEnvOriginal(gym.Env):
         prev_wealth = self.wealth
         prev_position = self.position
 
-        # Compute asset return from prev_position to t+1
-        if prev_position == self.cash_index:
+        # Compute asset return from the position chosen at time t (action)
+        # i.e. the allocation is effective for period [t, t+1]
+        if action == self.cash_index:
             asset_ret = 0.0
         else:
-            p_t = self.prices[self.t, prev_position]
-            p_tp1 = self.prices[self.t + 1, prev_position]
-            asset_ret = (p_tp1 / p_t) - 1.0
+            p_t = self.prices[self.t, action]
+            p_tp1 = self.prices[self.t + 1, action]
+            asset_ret = (p_tp1 / (p_t + 1e-12)) - 1.0
 
         # Wealth update before fee
         new_wealth = prev_wealth * (1.0 + asset_ret)
 
+        # Apply transaction fee multiplicatively if we change position (once)
         if action != prev_position:
             new_wealth *= (1.0 - self.fee)
 
         # Avoid negative or zero wealth blowing up logs
         new_wealth = max(new_wealth, 1e-12)
-
-        # 3. Apply transaction fee multiplicatively if we change position
-        trade_penalty = self.fee if action != prev_position else 0.0
-
-        new_wealth = new_wealth - trade_penalty
 
         # 4. Advance internal state
         self.wealth = new_wealth
