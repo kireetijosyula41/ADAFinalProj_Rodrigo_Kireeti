@@ -1,3 +1,16 @@
+"""
+Ensemble evaluation with per-model VecNormalize stats (correct logic).
+
+Usage:
+    python ensemble_eval.py ppo new 0
+    python ensemble_eval.py a2c new 0
+    python ensemble_eval.py trpo new 0
+
+where:
+    algo    = "ppo" | "a2c" | "trpo"
+    version = "new" | "original"
+    exp_id  = experiment index (0, 1, ...)
+"""
 import sys
 from typing import List
 
@@ -16,86 +29,100 @@ ALGOS = {
     "trpo": TRPO,
 }
 
-
-def make_eval_vec_env_for_stats(version: str, algo: str, stats_run: int):
+def make_base_env(version: str):
     """
-    Build a test VecEnv and load VecNormalize stats from a specific run.
-
-    This env will use vecnormalize_stats_{algo}_run{stats_run}.pkl
-    to normalize observations and (optionally) rewards.
+    Plain test VecEnv (NO VecNormalize) so we can apply per-model normalization.
     """
     def _init():
         return make_test_env(version)
 
-    base_env = DummyVecEnv([_init])
-
-    stats_path = f"./models/vecnormalize_stats_{algo}_run{stats_run}.pkl"
-    print(f"  Loading VecNormalize stats from: {stats_path}")
-    vec_env = VecNormalize.load(stats_path, base_env)
-
-    vec_env.training = False
-    vec_env.norm_reward = False
+    vec_env = DummyVecEnv([_init])
     return vec_env
 
-
-def ensemble_action(models, obs):
+def load_vecnorm_stats(path: str) -> VecNormalize:
     """
-    Soft voting: average action probabilities over models.
-
-    obs: np.ndarray of shape (1, obs_dim) as returned by VecEnv.
+    Load VecNormalize only to recover its statistics; env is not used.
     """
-    obs_tensor = torch.as_tensor(obs, dtype=torch.float32)
+    vn = VecNormalize.load(path, venv=None)
+    return vn
+
+def normalize_obs_with_stats(obs: np.ndarray, vn: VecNormalize) -> np.ndarray:
+    """
+    Apply VecNormalize's observation normalization manually:
+
+        obs_norm = clip( (obs - mean) / sqrt(var + eps), [-clip_obs, clip_obs] )
+
+    obs: shape (1, obs_dim)
+    """
+    mean = vn.obs_rms.mean
+    var = vn.obs_rms.var
+    eps = vn.epsilon
+    clip = vn.clip_obs
+
+    norm = (obs - mean) / np.sqrt(var + eps)
+    norm = np.clip(norm, -clip, clip)
+    return norm
+
+def ensemble_action(models, vecnorm_stats, obs_raw):
+    """
+    Soft voting over models with per-model normalization.
+
+    models        : list of SB3 models
+    vecnorm_stats : list of VecNormalize objects (stats only)
+    obs_raw       : np.ndarray (1, obs_dim) from the base env
+    """
     probs_list = []
 
-    for m in models:
+    for m, vn in zip(models, vecnorm_stats):
+        obs_norm = normalize_obs_with_stats(obs_raw, vn)
+        obs_tensor = torch.as_tensor(obs_norm, dtype=torch.float32)
+
         with torch.no_grad():
             dist = m.policy.get_distribution(obs_tensor)
             probs = dist.distribution.probs.detach().cpu().numpy()[0]
             probs_list.append(probs)
 
     mean_probs = np.mean(np.stack(probs_list, axis=0), axis=0)
-    mean_probs = mean_probs / np.sum(mean_probs)  # safety renormalization
+    mean_probs = mean_probs / np.sum(mean_probs)  # safety renorm
     action = int(np.argmax(mean_probs))
     return action, mean_probs
 
-
-def evaluate_ensemble_with_stats_run(
-    algo: str,
-    version: str,
-    run_ids: List[int],
-    stats_run: int,
-):
+def evaluate_ensemble(algo: str, version: str, exp_id: int, run_ids: List[int]):
     """
-    Evaluate ensemble using one particular VecNormalize stats file.
-
-    - algo: "ppo" / "a2c" / "trpo"
-    - version: "new" / "original"
-    - run_ids: model run indices, e.g. [0..9]
-    - stats_run: which run's VecNormalize stats to use for the env
+    Build an ensemble from {algo}_{version}_exp{exp_id}_run{r}.zip (r in run_ids),
+    each with its own VecNormalize stats, and evaluate on the test set.
     """
     ModelClass = ALGOS[algo]
-    print(f"\n=== Evaluating ensemble with stats from run {stats_run} ===")
 
-    # 1) Build eval env using stats from this stats_run
-    vec_env = make_eval_vec_env_for_stats(version, algo, stats_run)
+    print(f"=== Evaluating {algo.upper()} ensemble: version={version}, exp_id={exp_id} ===")
+    print(f"Runs: {run_ids}")
 
-    # 2) Load all models for this algo+version, attached to this env
+    # 1) Base env without VecNormalize
+    vec_env = make_base_env(version)
+
+    # 2) Load all models + their stats
     models = []
+    vecnorm_stats = []
     for r in run_ids:
-        model_path = f"./models/crypto_portfolio_{algo}_run{r}"
+        model_path = f"./models/crypto_portfolio_{algo}_run{r}.zip"
+        stats_path = f"./models/vecnormalize_stats_{algo}_run{r}.pkl"
+
         print(f"  Loading model: {model_path}")
         model = ModelClass.load(model_path, env=vec_env)
         models.append(model)
 
-    # 3) Run a single rollout using soft-voting ensemble
-    obs = vec_env.reset()  # VecEnv API: obs only
+        print(f"  Loading VecNormalize stats: {stats_path}")
+        vn = load_vecnorm_stats(stats_path)
+        vecnorm_stats.append(vn)
+
+    obs = vec_env.reset()  # raw obs
     done = False
 
     wealth_history = []
     action_history = []
 
     while not done:
-        action, mean_probs = ensemble_action(models, obs)
+        action, mean_probs = ensemble_action(models, vecnorm_stats, obs)
         action_history.append(action)
 
         obs, rewards, dones, infos = vec_env.step([action])
@@ -107,40 +134,21 @@ def evaluate_ensemble_with_stats_run(
             wealth_history.append(float(wealth))
 
     final_wealth = wealth_history[-1] if wealth_history else None
-    print(f"  Final wealth (stats_run={stats_run}): {final_wealth}")
-    print(f"  Total steps: {len(action_history)}")
+    print(f"\nFinal wealth (algo={algo}, version={version}, exp_id={exp_id}): {final_wealth}")
+    print(f"Total steps: {len(action_history)}")
 
-    return final_wealth, wealth_history, action_history
-
-
-def evaluate_ensemble_all_stats(algo: str, version: str, run_ids: List[int]):
-    """
-    For each stats_run in run_ids, evaluate the same model ensemble but
-    with that run's VecNormalize stats.
-
-    Returns a dict mapping stats_run -> final_wealth.
-    """
-    results = {}
-    for stats_run in run_ids:
-        final_w, _, _ = evaluate_ensemble_with_stats_run(
-            algo=algo,
-            version=version,
-            run_ids=run_ids,
-            stats_run=stats_run,
-        )
-        results[stats_run] = final_w
-
-    print("\nSummary of final wealth for each stats_run:")
-    for k in sorted(results.keys()):
-        print(f"  stats_run {k}: {results[k]}")
-    return results
-
+    return {
+        "final_wealth": final_wealth,
+        "wealth_path": wealth_history,
+        "actions": action_history,
+    }
 
 if __name__ == "__main__":
+    # Defaults: algo=ppo, version=new, exp_id=0
     algo = sys.argv[1] if len(sys.argv) > 1 else "ppo"
     version = sys.argv[2] if len(sys.argv) > 2 else "new"
+    exp_id = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 
-    # we assume 10 runs: 0..9
-    run_ids = list(range(10))
+    run_ids = list(range(10))  # 10-member ensemble
 
-    evaluate_ensemble_all_stats(algo, version, run_ids)
+    evaluate_ensemble(algo, version, exp_id, run_ids)

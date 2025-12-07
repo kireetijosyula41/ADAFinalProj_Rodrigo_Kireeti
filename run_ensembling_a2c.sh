@@ -29,7 +29,7 @@ train_algo_ensemble() {
 
   echo
   echo "Running ensemble evaluation for ${algo}..."
-  python ensemble_eval.py "${algo}" "${VERSION}"
+  python ensemble_eval.py "${algo}" "${VERSION}" "${EXP_ID}"
   echo
 }
 
