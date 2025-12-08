@@ -6,9 +6,6 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from make_envs import make_test_env
 
-# Purpose of this file: evaluate trained RL policies against buy-and-hold baselines
-# Used by running `python evaluate_policies.py` after training with train_ppo.py
-
 TICKERS = ["EOSUSD", "ZRXUSD", "NEOUSD", "TRXUSD", "OMGUSD", "BATUSD", "ADAUSD", "QTUMUSD", "XTZUSD", "DOGEUSD"]
 
 # TICKERS = [

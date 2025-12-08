@@ -6,7 +6,7 @@ VERSION="new"
 
 # How many ensemble members per algorithm
 N_RUNS=7
-EXP_ID=0  # Experiment ID to distinguish different ensemble experiments
+EXP_ID=0 # Experiment ID to distinguish different ensemble experiments
 
 echo "Running ensembles for version: ${VERSION}"
 echo "Number of runs per algorithm: ${N_RUNS}"

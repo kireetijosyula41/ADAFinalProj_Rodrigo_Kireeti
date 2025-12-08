@@ -33,6 +33,7 @@ train_algo_ensemble() {
   echo
 }
 
+# TRPO ensemble
 train_algo_ensemble "trpo"
 
 echo "All ensembles completed."
