@@ -10,7 +10,7 @@ Purpose:
 - Save the trained model and VecNormalize statistics for consistent evaluation.
 
 This module preserves the original CLI and file-path conventions used by the
-project's tests; only documentation and non-functional comments are added.
+project's tests
 """
 
 from sb3_contrib import TRPO
