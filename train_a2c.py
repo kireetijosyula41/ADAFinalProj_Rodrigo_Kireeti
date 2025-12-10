@@ -9,10 +9,6 @@ Purpose:
 - Instantiate and train a Stable-Baselines3 A2C agent with sensible defaults
   for financial time-series (gamma close to 1, modest learning rate).
 - Save the trained model and VecNormalize statistics for consistent evaluation.
-
-Notes:
-- This file intentionally preserves the original command-line interface and
-  file paths used by CI/tests. Only documentation and comments were added.
 """
 from stable_baselines3 import A2C
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
