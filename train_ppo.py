@@ -8,10 +8,6 @@ Purpose:
 - Instantiate and train a RecurrentPPO (LSTM) policy so the agent has temporal
   memory across timesteps.
 - Save the trained model and VecNormalize running statistics for later evaluation.
-
-Notes:
-- This change only adds documentation and lightweight comments; it does not
-  modify runtime behaviour or function signatures.
 """
 import numpy as np
 from sb3_contrib import RecurrentPPO
