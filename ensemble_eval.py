@@ -58,7 +58,7 @@ def load_vecnorm_stats(path: str) -> VecNormalize:
         raise ValueError("path must be a valid .pkl file for VecNormalize stats")
 
     # Build a single-env DummyVecEnv using the default test env (version "new")
-    base_env = make_test_env()  # preserves default behavior / versioning in your codebase
+    base_env = make_test_env()
     venv = DummyVecEnv([lambda: base_env])
 
     # Load VecNormalize and attach to the dummy vec-env
