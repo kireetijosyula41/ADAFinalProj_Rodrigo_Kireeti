@@ -23,9 +23,9 @@ TICKERS = [
     "BATUSD", "ADAUSD", "QTUMUSD", "XTZUSD", "DOGEUSD",
 ]
 
-DATE_COL = "timestamp"   # adjust if your CSVs use a different name
-PRICE_COL = "close"      # adjust if needed
-CSV_TEMPLATE = "{ticker}.csv"  # change to "data/{ticker}.csv" if you keep them in a subfolder
+DATE_COL = "timestamp"
+PRICE_COL = "close"
+CSV_TEMPLATE = "{ticker}.csv"  # change to "data/{ticker}.csv"
 
 
 def load_ticker_df(ticker: str) -> pd.DataFrame:
@@ -97,7 +97,7 @@ def main():
     # 4. Combine into a single DataFrame and drop any rows with NaNs
     all_df = pd.DataFrame(aligned_cols, index=full_index)
 
-    # Drop rows where at least one ticker still has NaN (i.e. pre-listing region)
+    # Drop rows where at least one ticker still has NaN
     before_drop = len(all_df)
     all_df = all_df.dropna(how="any")
     after_drop = len(all_df)
