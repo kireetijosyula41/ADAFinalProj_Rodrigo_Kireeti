@@ -49,7 +49,7 @@ def run_trained_agent(vec_env, model):
         Discrete actions chosen by the policy at each step.
     """
     obs = vec_env.reset()
-    wealth_path = [1.0]  # we know initial_wealth is 1.0 in the env
+    wealth_path = [1.0]
     actions_taken = []
     rewards = []
 
@@ -117,7 +117,6 @@ def buy_and_hold_baselines():
     test_prices = price_array[start_idx:]  # shape: (T_test_full, N)
 
     # The environment starts trading after it has seen WINDOW_SIZE days,
-    # i.e., at local index WINDOW_SIZE within test_prices.
     tradable_prices = test_prices[WINDOW_SIZE:]  # shape: (T_tradable, N)
     T_tradable = tradable_prices.shape[0]
 
