@@ -1,4 +1,4 @@
-# ADAFinalProj_Rodrigo_Kireeti
+# Reinforcement Learning for Momentum-Driven Assets
 
 MPCS 53112 Final Project on reinforcement learning for crypto portfolio management.
 
